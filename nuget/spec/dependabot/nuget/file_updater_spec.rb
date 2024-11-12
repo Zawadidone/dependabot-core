@@ -52,13 +52,42 @@ RSpec.describe Dependabot::Nuget::FileUpdater do
   end
   let(:repo_contents_path) { nuget_build_tmp_repo(project_name) }
 
+  # the minimum job object required by the updater
+  let(:job) do
+    {
+      job: {
+        "allowed-updates": [
+          { "update-type": "all" }
+        ],
+        "package-manager": "nuget",
+        source: {
+          provider: "github",
+          repo: "gocardless/bump",
+          directory: "/",
+          branch: "main"
+        }
+      }
+    }
+  end
+
   before do
     stub_search_results_with_versions_v3("microsoft.extensions.dependencymodel", ["1.0.0", "1.1.1"])
     stub_request(:get, "https://api.nuget.org/v3-flatcontainer/" \
                        "microsoft.extensions.dependencymodel/1.0.0/" \
                        "microsoft.extensions.dependencymodel.nuspec")
       .to_return(status: 200, body: fixture("nuspecs", "Microsoft.Extensions.DependencyModel.1.0.0.nuspec"))
+    file = Tempfile.new
+    File.write(file.path, job.to_json)
+    ENV["DEPENDABOT_JOB_PATH"] = file.path
   end
+
+  after do
+    job_path = ENV.fetch("DEPENDABOT_JOB_PATH")
+    FileUtils.rm_f(job_path)
+  end
+
+  # seed 43101 file not found
+  # seed 37288 env var not set
 
   it_behaves_like "a dependency file updater"
 
@@ -173,29 +202,7 @@ RSpec.describe Dependabot::Nuget::FileUpdater do
   end
 
   describe "#updated_dependency_files" do
-    # the minimum job object required by the updater
-    let(:job) do
-      {
-        job: {
-          "allowed-updates": [
-            { "update-type": "all" }
-          ],
-          "package-manager": "nuget",
-          source: {
-            provider: "github",
-            repo: "gocardless/bump",
-            directory: "/",
-            branch: "main"
-          }
-        }
-      }
-    end
-
     before do
-      file = Tempfile.new
-      File.write(file.path, job.to_json)
-      ENV["DEPENDABOT_JOB_PATH"] = file.path
-
       intercept_native_tools(
         discovery_content_hash: {
           Path: "",
@@ -231,11 +238,6 @@ RSpec.describe Dependabot::Nuget::FileUpdater do
           DotNetToolsJson: nil
         }
       )
-    end
-
-    after do
-      job_path = ENV.fetch("DEPENDABOT_JOB_PATH")
-      FileUtils.rm_f(job_path)
     end
 
     context "with a dirs.proj" do
@@ -300,10 +302,6 @@ RSpec.describe Dependabot::Nuget::FileUpdater do
     end
 
     before do
-      file = Tempfile.new
-      File.write(file.path, job.to_json)
-      ENV["DEPENDABOT_JOB_PATH"] = file.path
-
       intercept_native_tools(
         discovery_content_hash: {
           Path: "",
@@ -362,11 +360,6 @@ RSpec.describe Dependabot::Nuget::FileUpdater do
           DotNetToolsJson: nil
         }
       )
-    end
-
-    after do
-      job_path = ENV.fetch("DEPENDABOT_JOB_PATH")
-      FileUtils.rm_f(job_path)
     end
 
     it "updates the wildcard project" do

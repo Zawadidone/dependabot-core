@@ -1179,7 +1179,7 @@ public class RunWorkerTests
         experimentsManager ??= new ExperimentsManager();
         var testApiHandler = new TestApiHandler();
         var logger = new TestLogger();
-        discoveryWorker ??= new DiscoveryWorker(logger);
+        discoveryWorker ??= new DiscoveryWorker(experimentsManager, logger);
         analyzeWorker ??= new AnalyzeWorker(logger);
         updaterWorker ??= new UpdaterWorker(experimentsManager, logger);
 

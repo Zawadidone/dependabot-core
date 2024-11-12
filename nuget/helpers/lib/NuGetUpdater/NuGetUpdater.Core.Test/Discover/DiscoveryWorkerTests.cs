@@ -10,22 +10,28 @@ namespace NuGetUpdater.Core.Test.Discover;
 public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
 {
     [Theory]
-    [InlineData("src/project.csproj")]
-    [InlineData("src/project.vbproj")]
-    [InlineData("src/project.fsproj")]
-    public async Task TestProjectFiles(string projectPath)
+    [InlineData("src/project.csproj", true)]
+    [InlineData("src/project.csproj", false)]
+    [InlineData("src/project.vbproj", true)]
+    [InlineData("src/project.vbproj", false)]
+    [InlineData("src/project.fsproj", true)]
+    [InlineData("src/project.fsproj", false)]
+    public async Task TestProjectFiles(string projectPath, bool useDirectDiscovery)
     {
         var expectedDependencies = new List<Dependency>()
         {
             new Dependency("Some.Package", "9.0.1", DependencyType.PackageReference, TargetFrameworks: ["net8.0"], IsDirect: true)
         };
-        if (Path.GetExtension(projectPath)! == ".fsproj")
+        if (useDirectDiscovery && Path.GetExtension(projectPath)! == ".fsproj")
         {
             // this package ships with the SDK and is automatically added for F# projects but should be manually added here to make the test consistent
+            // only direct package discovery finds this, though
             expectedDependencies.Add(new Dependency("FSharp.Core", "9.0.100-beta.24422.2", DependencyType.PackageReference, TargetFrameworks: ["net8.0"], IsDirect: true));
         }
 
+        var experimentsManager = new ExperimentsManager() { UseDirectDiscovery = useDirectDiscovery };
         await TestDiscoveryAsync(
+            experimentsManager: experimentsManager,
             packages:
             [
                 MockNuGetPackage.CreateSimplePackage("Some.Package", "9.0.1", "net8.0"),
@@ -65,10 +71,14 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
         );
     }
 
-    [Fact]
-    public async Task TestDependencyWithTrailingSpacesInAttribute()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TestDependencyWithTrailingSpacesInAttribute(bool useDirectDiscovery)
     {
+        var experimentsManager = new ExperimentsManager() { UseDirectDiscovery = useDirectDiscovery };
         await TestDiscoveryAsync(
+            experimentsManager: experimentsManager,
             packages:
             [
                 MockNuGetPackage.CreateSimplePackage("Some.Package", "9.0.1", "net8.0"),
@@ -110,10 +120,14 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
         );
     }
 
-    [Fact]
-    public async Task TestPackageConfig()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TestPackageConfig(bool useDirectDiscovery)
     {
+        var experimentsManager = new ExperimentsManager() { UseDirectDiscovery = useDirectDiscovery };
         await TestDiscoveryAsync(
+            experimentsManager: experimentsManager,
             packages:
             [
                 MockNuGetPackage.CreateSimplePackage("Some.Package", "7.0.1", "net45"),
@@ -153,7 +167,6 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
                     {
                         FilePath = "project.csproj",
                         TargetFrameworks = ["net45"],
-                        ExpectedDependencyCount = 1,
                         Dependencies = [
                             new("Some.Package", "7.0.1", DependencyType.PackagesConfig, TargetFrameworks: ["net45"]),
                         ],
@@ -165,9 +178,10 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
     }
 
     [Fact]
-    public async Task TestProps()
+    public async Task TestProps_DirectDiscovery()
     {
         await TestDiscoveryAsync(
+            experimentsManager: new ExperimentsManager() { UseDirectDiscovery = true },
             packages:
             [
                 MockNuGetPackage.CreateSimplePackage("Some.Package", "9.0.1", "net8.0"),
@@ -212,7 +226,7 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
                             new("Some.Package", "9.0.1", DependencyType.PackageReference, TargetFrameworks: ["net8.0"], IsDirect: true)
                         ],
                         Properties = [
-                            new("TargetFramework", "net8.0", "src/project.csproj"),
+                            new("TargetFramework", "net8.0", "src/project.csproj")
                         ]
                     }
                 ],
@@ -225,10 +239,74 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
     }
 
     [Fact]
-    public async Task TestRepo()
+    public async Task TestProps_NoDirectDiscovery()
+    {
+        await TestDiscoveryAsync(
+            experimentsManager: new ExperimentsManager() { UseDirectDiscovery = false },
+            packages:
+            [
+                MockNuGetPackage.CreateSimplePackage("Some.Package", "9.0.1", "net8.0"),
+            ],
+            workspacePath: "src",
+            files: new[]
+            {
+                ("src/project.csproj", """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup>
+                        <TargetFramework>net8.0</TargetFramework>
+                      </PropertyGroup>
+
+                      <ItemGroup>
+                        <PackageReference Include="Some.Package" />
+                      </ItemGroup>
+                    </Project>
+                    """),
+                ("Directory.Build.props", "<Project />"),
+                ("Directory.Packages.props", """
+                    <Project>
+                      <PropertyGroup>
+                        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+                        <SomePackageVersion>9.0.1</SomePackageVersion>
+                      </PropertyGroup>
+
+                      <ItemGroup>
+                        <PackageVersion Include="Some.Package" Version="$(SomePackageVersion)" />
+                      </ItemGroup>
+                    </Project>
+                    """)
+            },
+            expectedResult: new()
+            {
+                Path = "src",
+                Projects = [
+                    new()
+                    {
+                        FilePath = "project.csproj",
+                        TargetFrameworks = ["net8.0"],
+                        Dependencies = [
+                            new("Some.Package", "9.0.1", DependencyType.PackageReference, TargetFrameworks: ["net8.0"], IsDirect: true)
+                        ],
+                        Properties = [
+                            new("ManagePackageVersionsCentrally", "true", "Directory.Packages.props"),
+                            new("SomePackageVersion", "9.0.1", "Directory.Packages.props"),
+                            new("TargetFramework", "net8.0", "src/project.csproj")
+                        ]
+                    }
+                ],
+                ImportedFiles = [
+                    "Directory.Build.props",
+                    "Directory.Packages.props",
+                ]
+            }
+        );
+    }
+
+    [Fact]
+    public async Task TestRepo_DirectDiscovery()
     {
         var solutionPath = "solution.sln";
         await TestDiscoveryAsync(
+            experimentsManager: new ExperimentsManager() { UseDirectDiscovery = true },
             packages:
             [
                 MockNuGetPackage.CreateSimplePackage("Some.Package", "9.0.1", "net7.0"),
@@ -329,7 +407,7 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
                             new("Some.Package", "9.0.1", DependencyType.PackageReference, TargetFrameworks: ["net8.0"], IsDirect: true),
                         ],
                         Properties = [
-                            new("TargetFrameworks", "net7.0;net8.0", "src/project.csproj"),
+                            new("TargetFrameworks", "net7.0;net8.0", "src/project.csproj")
                         ]
                     }
                 ],
@@ -359,9 +437,149 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
     }
 
     [Fact]
-    public async Task NonSupportedProjectExtensionsAreSkipped()
+    public async Task TestRepo_NoDirectDiscovery()
     {
+        var solutionPath = "solution.sln";
         await TestDiscoveryAsync(
+            experimentsManager: new ExperimentsManager() { UseDirectDiscovery = false },
+            packages:
+            [
+                MockNuGetPackage.CreateSimplePackage("Some.Package", "9.0.1", "net7.0"),
+            ],
+            workspacePath: "",
+            files: new[]
+            {
+                ("src/project.csproj", """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup>
+                        <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
+                      </PropertyGroup>
+
+                      <ItemGroup>
+                        <PackageReference Include="Some.Package" />
+                      </ItemGroup>
+                    </Project>
+                    """),
+                ("Directory.Build.props", "<Project />"),
+                ("Directory.Packages.props", """
+                    <Project>
+                      <PropertyGroup>
+                        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+                        <SomePackageVersion>9.0.1</SomePackageVersion>
+                      </PropertyGroup>
+
+                      <ItemGroup>
+                        <PackageVersion Include="Some.Package" Version="$(SomePackageVersion)" />
+                      </ItemGroup>
+                    </Project>
+                    """),
+                (solutionPath, """
+                    Microsoft Visual Studio Solution File, Format Version 12.00
+                    # Visual Studio 14
+                    VisualStudioVersion = 14.0.22705.0
+                    MinimumVisualStudioVersion = 10.0.40219.1
+                    Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "project", ".\src\project.csproj", "{782E0C0A-10D3-444D-9640-263D03D2B20C}"
+                    EndProject
+                    Global
+                      GlobalSection(SolutionConfigurationPlatforms) = preSolution
+                        Debug|Any CPU = Debug|Any CPU
+                        Release|Any CPU = Release|Any CPU
+                      EndGlobalSection
+                      GlobalSection(ProjectConfigurationPlatforms) = postSolution
+                        {782E0C0A-10D3-444D-9640-263D03D2B20C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+                        {782E0C0A-10D3-444D-9640-263D03D2B20C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+                        {782E0C0A-10D3-444D-9640-263D03D2B20C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+                        {782E0C0A-10D3-444D-9640-263D03D2B20C}.Release|Any CPU.Build.0 = Release|Any CPU
+                      EndGlobalSection
+                      GlobalSection(SolutionProperties) = preSolution
+                        HideSolutionNode = FALSE
+                      EndGlobalSection
+                    EndGlobal
+                    """),
+                ("global.json", """
+                    {
+                      "sdk": {
+                        "version": "6.0.405",
+                        "rollForward": "latestPatch"
+                      },
+                      "msbuild-sdks": {
+                        "My.Custom.Sdk": "5.0.0",
+                        "My.Other.Sdk": "1.0.0-beta"
+                      }
+                    }
+                    """),
+                (".config/dotnet-tools.json", """
+                    {
+                      "version": 1,
+                      "isRoot": true,
+                      "tools": {
+                        "microsoft.botsay": {
+                          "version": "1.0.0",
+                          "commands": [
+                            "botsay"
+                          ]
+                        },
+                        "dotnetsay": {
+                          "version": "2.1.3",
+                          "commands": [
+                            "dotnetsay"
+                          ]
+                        }
+                      }
+                    }
+                    """),
+            },
+            expectedResult: new()
+            {
+                Path = "",
+                Projects = [
+                    new()
+                    {
+                        FilePath = "src/project.csproj",
+                        TargetFrameworks = ["net7.0", "net8.0"],
+                        Dependencies = [
+                            new("Some.Package", "9.0.1", DependencyType.PackageReference, TargetFrameworks: ["net7.0", "net8.0"], IsDirect: true),
+                        ],
+                        Properties = [
+                            new("ManagePackageVersionsCentrally", "true", "Directory.Packages.props"),
+                            new("SomePackageVersion", "9.0.1", "Directory.Packages.props"),
+                            new("TargetFrameworks", "net7.0;net8.0", "src/project.csproj")
+                        ]
+                    }
+                ],
+                ImportedFiles = [
+                    "Directory.Build.props",
+                    "Directory.Packages.props",
+                ],
+                GlobalJson = new()
+                {
+                    FilePath = "global.json",
+                    Dependencies = [
+                        new("Microsoft.NET.Sdk", "6.0.405", DependencyType.MSBuildSdk),
+                        new("My.Custom.Sdk", "5.0.0", DependencyType.MSBuildSdk),
+                        new("My.Other.Sdk", "1.0.0-beta", DependencyType.MSBuildSdk),
+                    ]
+                },
+                DotNetToolsJson = new()
+                {
+                    FilePath = ".config/dotnet-tools.json",
+                    Dependencies = [
+                        new("microsoft.botsay", "1.0.0", DependencyType.DotNetTool),
+                        new("dotnetsay", "2.1.3", DependencyType.DotNetTool),
+                    ]
+                }
+            }
+        );
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task NonSupportedProjectExtensionsAreSkipped(bool useDirectDiscovery)
+    {
+        var experimentsManager = new ExperimentsManager() { UseDirectDiscovery = useDirectDiscovery };
+        await TestDiscoveryAsync(
+            experimentsManager: experimentsManager,
             packages:
             [
                 MockNuGetPackage.CreateSimplePackage("Some.Package", "1.0.0", "net8.0"),
@@ -467,8 +685,10 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
         Assert.Equal("<some package feed>", errorDetails.GetString());
     }
 
-    [Fact]
-    public async Task ReportsPrivateSourceAuthenticationFailure()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ReportsPrivateSourceAuthenticationFailure(bool useDirectDiscovery)
     {
         static (int, string) TestHttpHandler(string uriString)
         {
@@ -510,7 +730,9 @@ public partial class DiscoveryWorkerTests : DiscoveryWorkerTestBase
             ("NUGET_PLUGINS_CACHE_PATH", Path.Combine(tempDir.DirectoryPath, "NUGET_PLUGINS_CACHE_PATH")),
         ]);
         using var http = TestHttpServer.CreateTestStringServer(TestHttpHandler);
+        var experimentsManager = new ExperimentsManager() { UseDirectDiscovery = useDirectDiscovery };
         await TestDiscoveryAsync(
+            experimentsManager: experimentsManager,
             workspacePath: "",
             files:
             [

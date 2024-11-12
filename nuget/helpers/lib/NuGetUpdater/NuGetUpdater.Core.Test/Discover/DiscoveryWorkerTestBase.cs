@@ -19,27 +19,29 @@ public class DiscoveryWorkerTestBase : TestBase
         string workspacePath,
         TestFile[] files,
         ExpectedWorkspaceDiscoveryResult expectedResult,
-        MockNuGetPackage[]? packages = null)
+        MockNuGetPackage[]? packages = null,
+        ExperimentsManager? experimentsManager = null)
     {
+        experimentsManager ??= new ExperimentsManager();
         var actualResult = await RunDiscoveryAsync(files, async directoryPath =>
         {
             await UpdateWorkerTestBase.MockNuGetPackagesInDirectory(packages, directoryPath);
 
-            var worker = new DiscoveryWorker(new TestLogger());
+            var worker = new DiscoveryWorker(experimentsManager, new TestLogger());
             var result = await worker.RunWithErrorHandlingAsync(directoryPath, workspacePath);
             return result;
         });
 
-        ValidateWorkspaceResult(expectedResult, actualResult);
+        ValidateWorkspaceResult(expectedResult, actualResult, experimentsManager);
     }
 
-    protected static void ValidateWorkspaceResult(ExpectedWorkspaceDiscoveryResult expectedResult, WorkspaceDiscoveryResult actualResult)
+    protected static void ValidateWorkspaceResult(ExpectedWorkspaceDiscoveryResult expectedResult, WorkspaceDiscoveryResult actualResult, ExperimentsManager experimentsManager)
     {
         Assert.NotNull(actualResult);
         Assert.Equal(expectedResult.Path.NormalizePathToUnix(), actualResult.Path.NormalizePathToUnix());
         ValidateResultWithDependencies(expectedResult.GlobalJson, actualResult.GlobalJson);
         ValidateResultWithDependencies(expectedResult.DotNetToolsJson, actualResult.DotNetToolsJson);
-        ValidateProjectResults(expectedResult.Projects, actualResult.Projects);
+        ValidateProjectResults(expectedResult.Projects, actualResult.Projects, experimentsManager);
         AssertEx.Equal(expectedResult.ImportedFiles, actualResult.ImportedFiles, PathComparer.Instance);
         Assert.Equal(expectedResult.ExpectedProjectCount ?? expectedResult.Projects.Length, actualResult.Projects.Length);
         Assert.Equal(expectedResult.ErrorType, actualResult.ErrorType);
@@ -65,7 +67,7 @@ public class DiscoveryWorkerTestBase : TestBase
         }
     }
 
-    internal static void ValidateProjectResults(ImmutableArray<ExpectedSdkProjectDiscoveryResult> expectedProjects, ImmutableArray<ProjectDiscoveryResult> actualProjects)
+    internal static void ValidateProjectResults(ImmutableArray<ExpectedSdkProjectDiscoveryResult> expectedProjects, ImmutableArray<ProjectDiscoveryResult> actualProjects, ExperimentsManager experimentsManager)
     {
         if (expectedProjects.IsDefaultOrEmpty)
         {
@@ -77,7 +79,16 @@ public class DiscoveryWorkerTestBase : TestBase
             var actualProject = actualProjects.SingleOrDefault(p => p.FilePath.NormalizePathToUnix() == expectedProject.FilePath.NormalizePathToUnix());
             Assert.True(actualProject is not null, $"Unable to find project with path `{expectedProject.FilePath.NormalizePathToUnix()}` in collection [{string.Join(", ", actualProjects.Select(p => p.FilePath))}]");
             Assert.Equal(expectedProject.FilePath.NormalizePathToUnix(), actualProject.FilePath.NormalizePathToUnix());
-            AssertEx.Equal(expectedProject.Properties, actualProject.Properties, PropertyComparer.Instance);
+
+            // some properties are byproducts of the older temporary project discovery process and shouldn't be returned
+            var actualProperties = actualProject.Properties;
+            if (!experimentsManager.UseDirectDiscovery)
+            {
+                var forbiddenProperties = new HashSet<string>(["TargetFrameworkVersion"], StringComparer.OrdinalIgnoreCase);
+                actualProperties = actualProperties.Where(p => !forbiddenProperties.Contains(p.Name)).ToImmutableArray();
+            }
+
+            AssertEx.Equal(expectedProject.Properties, actualProperties, PropertyComparer.Instance);
             AssertEx.Equal(expectedProject.TargetFrameworks, actualProject.TargetFrameworks);
             AssertEx.Equal(expectedProject.ReferencedProjectPaths, actualProject.ReferencedProjectPaths);
             if (expectedProject.ImportedFiles is not null)
@@ -85,8 +96,16 @@ public class DiscoveryWorkerTestBase : TestBase
                 AssertEx.Equal(expectedProject.ImportedFiles.Value.Select(PathHelper.NormalizePathToUnix), actualProject.ImportedFiles.Select(PathHelper.NormalizePathToUnix));
             }
 
-            ValidateDependencies(expectedProject.Dependencies, actualProject.Dependencies);
-            Assert.Equal(expectedProject.ExpectedDependencyCount ?? expectedProject.Dependencies.Length, actualProject.Dependencies.Length);
+            // some dependencies are byproducts of the older temporary project discovery process and shouldn't be returned
+            var actualDependencies = actualProject.Dependencies;
+            if (!experimentsManager.UseDirectDiscovery)
+            {
+                var forbiddenDependencies = new HashSet<string>(["Microsoft.NET.Sdk", "Microsoft.NETFramework.ReferenceAssemblies"], StringComparer.OrdinalIgnoreCase);
+                actualDependencies = actualDependencies.Where(d => !forbiddenDependencies.Contains(d.Name)).ToImmutableArray();
+            }
+
+            ValidateDependencies(expectedProject.Dependencies, actualDependencies);
+            Assert.Equal(expectedProject.ExpectedDependencyCount ?? expectedProject.Dependencies.Length, actualDependencies.Length);
         }
     }
 

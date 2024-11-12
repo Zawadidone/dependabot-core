@@ -55,8 +55,34 @@ RSpec.describe Dependabot::Nuget::UpdateChecker do
     )
   end
 
+  # the minimum job object required by the updater
+  let(:job) do
+    {
+      job: {
+        "allowed-updates": [
+          { "update-type": "all" }
+        ],
+        "package-manager": "nuget",
+        source: {
+          provider: "github",
+          repo: "gocardless/bump",
+          directory: "/",
+          branch: "main"
+        }
+      }
+    }
+  end
+
   before do
     Dependabot::Experiments.register(:nuget_native_analysis, true)
+    file = Tempfile.new
+    File.write(file.path, job.to_json)
+    ENV["DEPENDABOT_JOB_PATH"] = file.path
+  end
+
+  after do
+    job_path = ENV.fetch("DEPENDABOT_JOB_PATH")
+    FileUtils.rm_f(job_path)
   end
 
   it_behaves_like "an update checker"

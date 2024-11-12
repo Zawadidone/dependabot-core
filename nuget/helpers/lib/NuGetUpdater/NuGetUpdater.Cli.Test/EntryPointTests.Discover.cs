@@ -17,12 +17,16 @@ public partial class EntryPointTests
 {
     public class Discover : DiscoveryWorkerTestBase
     {
-        [Fact]
-        public async Task PathWithSpaces()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task PathWithSpaces(bool useDirectDiscovery)
         {
             await RunAsync(path =>
                 [
                     "discover",
+                    "--job-path",
+                    Path.Combine(path, "job.json"),
                     "--repo-root",
                     path,
                     "--workspace",
@@ -30,6 +34,7 @@ public partial class EntryPointTests
                     "--output",
                     Path.Combine(path, DiscoveryWorker.DiscoveryResultFileName),
                 ],
+                experimentsManager: new ExperimentsManager() { UseDirectDiscovery = useDirectDiscovery },
                 packages:
                 [
                     MockNuGetPackage.CreateSimplePackage("Some.Package", "1.2.3", "net8.0"),
@@ -67,12 +72,16 @@ public partial class EntryPointTests
             );
         }
 
-        [Fact]
-        public async Task WithSolution()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task WithSolution(bool useDirectDiscovery)
         {
             await RunAsync(path =>
                 [
                     "discover",
+                    "--job-path",
+                    Path.Combine(path, "job.json"),
                     "--repo-root",
                     path,
                     "--workspace",
@@ -80,6 +89,7 @@ public partial class EntryPointTests
                     "--output",
                     Path.Combine(path, DiscoveryWorker.DiscoveryResultFileName),
                 ],
+                experimentsManager: new ExperimentsManager() { UseDirectDiscovery = useDirectDiscovery },
                 packages:
                 [
                     MockNuGetPackage.CreateSimplePackage("Some.Package", "7.0.1", "net45"),
@@ -152,12 +162,16 @@ public partial class EntryPointTests
             );
         }
 
-        [Fact]
-        public async Task WithProject()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task WithProject(bool useDirectDiscovery)
         {
             await RunAsync(path =>
                 [
                     "discover",
+                    "--job-path",
+                    Path.Combine(path, "job.json"),
                     "--repo-root",
                     path,
                     "--workspace",
@@ -165,6 +179,7 @@ public partial class EntryPointTests
                     "--output",
                     Path.Combine(path, DiscoveryWorker.DiscoveryResultFileName),
                 ],
+                experimentsManager: new ExperimentsManager() { UseDirectDiscovery = useDirectDiscovery },
                 packages:
                 [
                     MockNuGetPackage.CreateSimplePackage("Some.Package", "7.0.1", "net45"),
@@ -214,13 +229,17 @@ public partial class EntryPointTests
             );
         }
 
-        [Fact]
-        public async Task WithDirectory()
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task WithDirectory(bool useDirectDiscovery)
         {
             var workspacePath = "path/to/";
             await RunAsync(path =>
                 [
                     "discover",
+                    "--job-path",
+                    Path.Combine(path, "job.json"),
                     "--repo-root",
                     path,
                     "--workspace",
@@ -228,6 +247,7 @@ public partial class EntryPointTests
                     "--output",
                     Path.Combine(path, DiscoveryWorker.DiscoveryResultFileName),
                 ],
+                experimentsManager: new ExperimentsManager() { UseDirectDiscovery = useDirectDiscovery },
                 packages:
                 [
                     MockNuGetPackage.CreateSimplePackage("Some.Package", "7.0.1", "net45"),
@@ -283,6 +303,8 @@ public partial class EntryPointTests
             await RunAsync(path =>
                 [
                     "discover",
+                    "--job-path",
+                    Path.Combine(path, "job.json"),
                     "--repo-root",
                     path,
                     "--workspace",
@@ -314,6 +336,7 @@ public partial class EntryPointTests
                         </Project>
                         """)
                 },
+                experimentsManager: new ExperimentsManager() { UseDirectDiscovery = true },
                 packages:
                 [
                     MockNuGetPackage.CreateSimplePackage("Package.A", "1.2.3", "net8.0"),
@@ -349,8 +372,10 @@ public partial class EntryPointTests
             Func<string, string[]> getArgs,
             TestFile[] initialFiles,
             ExpectedWorkspaceDiscoveryResult expectedResult,
-            MockNuGetPackage[]? packages = null)
+            MockNuGetPackage[]? packages = null,
+            ExperimentsManager? experimentsManager = null)
         {
+            experimentsManager ??= new ExperimentsManager();
             var actualResult = await RunDiscoveryAsync(initialFiles, async path =>
             {
                 var sb = new StringBuilder();
@@ -363,8 +388,19 @@ public partial class EntryPointTests
 
                 try
                 {
+                    await UpdateWorkerTestBase.MockJobFileInDirectory(path, experimentsManager);
                     await UpdateWorkerTestBase.MockNuGetPackagesInDirectory(packages, path);
                     var args = getArgs(path);
+
+                    // manually pull out the experiments manager for the validate step below
+                    for (int i = 0; i < args.Length - 1; i++)
+                    {
+                        if (args[i] == "--job-path")
+                        {
+                            experimentsManager = await ExperimentsManager.FromJobFileAsync(args[i + 1], new TestLogger());
+                        }
+                    }
+
                     var result = await Program.Main(args);
                     if (result != 0)
                     {
@@ -383,7 +419,7 @@ public partial class EntryPointTests
                 return resultObject!;
             });
 
-            ValidateWorkspaceResult(expectedResult, actualResult);
+            ValidateWorkspaceResult(expectedResult, actualResult, experimentsManager);
         }
     }
 }

@@ -34,6 +34,24 @@ RSpec.describe Dependabot::Nuget::FileParser do
   end
   let(:files) { [csproj_file] + additional_files }
 
+  # the minimum job object required by the updater
+  let(:job) do
+    {
+      job: {
+        "allowed-updates": [
+          { "update-type": "all" }
+        ],
+        "package-manager": "nuget",
+        source: {
+          provider: "github",
+          repo: "gocardless/bump",
+          directory: "/",
+          branch: "main"
+        }
+      }
+    }
+  end
+
   it_behaves_like "a dependency file parser"
 
   def run_parser_test(&_block)
@@ -74,6 +92,17 @@ RSpec.describe Dependabot::Nuget::FileParser do
   end
 
   describe "parse" do
+    before do
+      file = Tempfile.new
+      File.write(file.path, job.to_json)
+      ENV["DEPENDABOT_JOB_PATH"] = file.path
+    end
+
+    after do
+      job_path = ENV.fetch("DEPENDABOT_JOB_PATH")
+      FileUtils.rm_f(job_path)
+    end
+
     context "with a single project file" do
       before do
         intercept_native_tools(
