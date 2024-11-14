@@ -313,7 +313,7 @@ module Dependabot
 
       @installed_versions ||= {}
 
-      sig { params(name: T.nilable(String)).returns(T.nilable(String)) }
+      sig { params(name: T.nilable(String)).returns(String) }
       def installed_version(name)
         # Return the memoized version if it has already been computed
         return @installed_versions[name] if @installed_versions.key?(name)
@@ -327,17 +327,18 @@ module Dependabot
           fingerprint: "<name> --version"
         ).strip
 
-        # Check if installed_version matches the pattern
-        @installed_versions[name] = if installed_version.match?(PACKAGE_MANAGER_VERSION_REGEX)
-                                      # Memoize the installed version by package manager name
-                                      installed_version
-                                    else
-                                      # Fallback to version from lockfile if format does not match and memoize it
-                                      Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym])
-                                    end
+        if installed_version.match?(PACKAGE_MANAGER_VERSION_REGEX)
+          @installed_versions[name] = installed_version
+          return @installed_versions[name]
+        end
+
+        @installed_versions[name] = Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym])
+
+        Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym]) if @installed_versions[name].nil?
+        @installed_versions[name]
       end
 
-      sig { params(name: T.nilable(String)).returns(T.nilable(String)) }
+      sig { params(name: T.nilable(String)).returns(String) }
       def ensure_valid_package_manager(name)
         name = DEFAULT_PACKAGE_MANAGER if name.nil? || PACKAGE_MANAGER_CLASSES[name].nil?
         name
