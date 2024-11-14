@@ -10,6 +10,7 @@ module Dependabot
     ECOSYSTEM = "npm_and_yarn"
     MANIFEST_FILENAME = "package.json"
     LERNA_JSON_FILENAME = "lerna.json"
+    PACKAGE_MANAGER_VERSION_REGEX = /^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$/
 
     MANIFEST_PACKAGE_MANAGER_KEY = "packageManager"
     MANIFEST_ENGINES_KEY = "engines"
@@ -286,9 +287,9 @@ module Dependabot
 
         package_manager_class ||= PACKAGE_MANAGER_CLASSES[DEFAULT_PACKAGE_MANAGER]
 
-        version = Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym])
+        version = installed_version(name)
 
-        package_manager_class.new(version.to_s)
+        package_manager_class.new(version)
       end
 
       def raise_if_unsupported!(name, version)
@@ -298,6 +299,7 @@ module Dependabot
         raise ToolVersionNotSupported.new(PNPMPackageManager::NAME.upcase, version, "7.*, 8.*")
       end
 
+      sig { params(name: T.nilable(String), version: T.nilable(String)).void }
       def install(name, version)
         Dependabot.logger.info("Installing \"#{name}@#{version}\"")
 
@@ -305,8 +307,43 @@ module Dependabot
           "corepack install #{name}@#{version} --global --cache-only",
           fingerprint: "corepack install <name>@<version> --global --cache-only"
         )
+
+        Dependabot.logger.info("Installed version of #{name}: #{installed_version(name)}")
       end
 
+      @installed_versions ||= {}
+
+      sig { params(name: T.nilable(String)).returns(T.nilable(String)) }
+      def installed_version(name)
+        # Return the memoized version if it has already been computed
+        return @installed_versions[name] if @installed_versions.key?(name)
+
+        # Ensure the package manager is valid or fallback to default
+        name = ensure_valid_package_manager(name)
+
+        # Attempt to get the installed version
+        installed_version = SharedHelpers.run_shell_command(
+          "#{name} --version",
+          fingerprint: "<name> --version"
+        ).strip
+
+        # Check if installed_version matches the pattern
+        @installed_versions[name] = if installed_version.match?(PACKAGE_MANAGER_VERSION_REGEX)
+                                      # Memoize the installed version by package manager name
+                                      installed_version
+                                    else
+                                      # Fallback to version from lockfile if format does not match and memoize it
+                                      Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym])
+                                    end
+      end
+
+      sig { params(name: T.nilable(String)).returns(T.nilable(String)) }
+      def ensure_valid_package_manager(name)
+        name = DEFAULT_PACKAGE_MANAGER if name.nil? || PACKAGE_MANAGER_CLASSES[name].nil?
+        name
+      end
+
+      sig { params(name: T.nilable(String)).returns(T.nilable(String)) }
       def requested_version(name)
         return unless @manifest_package_manager
 
