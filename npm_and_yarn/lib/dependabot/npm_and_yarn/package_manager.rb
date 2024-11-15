@@ -262,14 +262,14 @@ module Dependabot
         if version
           raise_if_unsupported!(name, version)
 
-          install(name, version)
+          install(name, version.to_s)
         else
           version = guessed_version(name)
 
           if version
             raise_if_unsupported!(name, version.to_s)
 
-            install(name, version) if name == PNPMPackageManager::NAME
+            install(name, version.to_s) if name == PNPMPackageManager::NAME
           end
         end
 
