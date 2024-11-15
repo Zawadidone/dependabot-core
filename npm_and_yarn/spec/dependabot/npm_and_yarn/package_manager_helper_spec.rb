@@ -130,8 +130,8 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
 
     context "when the installed version matches the expected format" do
       before do
-        allow(Dependabot::SharedHelpers).to receive(:run_shell_command).with("npm --version",
-                                                                             fingerprint: "<name> --version").and_return("7.5.2")
+        allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
+          .with("npm --version", fingerprint: "<name> --version").and_return("7.5.2")
       end
 
       it "returns the raw installed version and caches it" do
@@ -143,9 +143,11 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
 
     context "when the installed version does not match the expected format" do
       before do
-        allow(Dependabot::SharedHelpers).to receive(:run_shell_command).with("yarn --version",
-                                                                             fingerprint: "<name> --version").and_return("invalid_version")
-        allow(Dependabot::NpmAndYarn::Helpers).to receive(:yarn_version_numeric).and_return("1")
+        allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
+          .with("yarn --version", fingerprint: "<name> --version")
+          .and_return("invalid_version")
+        allow(Dependabot::NpmAndYarn::Helpers).to receive(:yarn_version_numeric)
+          .and_return("1")
       end
 
       it "falls back to the lockfile version" do
@@ -157,15 +159,15 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
 
     context "when memoization is in effect" do
       before do
-        allow(Dependabot::SharedHelpers).to receive(:run_shell_command).with("pnpm --version",
-                                                                             fingerprint: "<name> --version").and_return("7.1.0")
+        allow(Dependabot::SharedHelpers).to receive(:run_shell_command)
+          .with("pnpm --version", fingerprint: "<name> --version").and_return("7.1.0")
         # Pre-cache the result
         helper.installed_version("pnpm")
       end
 
       it "does not re-run the shell command and uses the cached version" do
-        expect(Dependabot::SharedHelpers).not_to receive(:run_shell_command).with("pnpm --version",
-                                                                                  fingerprint: "<name> --version")
+        expect(Dependabot::SharedHelpers).not_to receive(:run_shell_command)
+          .with("pnpm --version", fingerprint: "<name> --version")
         expect(helper.installed_version("pnpm")).to eq("7.1.0")
       end
     end
