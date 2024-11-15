@@ -310,6 +310,10 @@ module Dependabot
         Dependabot.logger.info("Installed version of #{name}: #{installed_version(name)}")
       end
 
+      # Retrieve the installed version of the package manager by executing
+      # the "<name> --version" command and using the output.
+      # If the output does not match the expected version format (PACKAGE_MANAGER_VERSION_REGEX),
+      # fall back to the version inferred from the dependency files.
       sig { params(name: T.nilable(String)).returns(String) }
       def installed_version(name)
         # Return the memoized version if it has already been computed
