@@ -282,11 +282,9 @@ module Dependabot
 
       sig { params(name: T.nilable(String)).returns(Ecosystem::VersionManager) }
       def package_manager_by_name(name)
-        name = DEFAULT_PACKAGE_MANAGER if name.nil? || PACKAGE_MANAGER_CLASSES[name].nil?
+        name = ensure_valid_package_manager(name)
 
         package_manager_class = PACKAGE_MANAGER_CLASSES[name]
-
-        package_manager_class ||= PACKAGE_MANAGER_CLASSES[DEFAULT_PACKAGE_MANAGER]
 
         version = installed_version(name)
 
