@@ -10,7 +10,7 @@ module Dependabot
     ECOSYSTEM = "npm_and_yarn"
     MANIFEST_FILENAME = "package.json"
     LERNA_JSON_FILENAME = "lerna.json"
-    PACKAGE_MANAGER_VERSION_REGEX = /^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$/
+    PACKAGE_MANAGER_VERSION_REGEX = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:-(?<pre_release>[a-zA-Z0-9.]+))?(?:\+(?<build>[a-zA-Z0-9.]+))?$/ # rubocop:disable Layout/LineLength
 
     MANIFEST_PACKAGE_MANAGER_KEY = "packageManager"
     MANIFEST_ENGINES_KEY = "engines"
