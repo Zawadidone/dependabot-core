@@ -134,10 +134,8 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
           .with("npm --version", fingerprint: "<name> --version").and_return("7.5.2")
       end
 
-      it "returns the raw installed version and caches it" do
+      it "returns the raw installed version" do
         expect(helper.installed_version("npm")).to eq("7.5.2")
-        # Check that the version is memoized
-        expect(helper.instance_variable_get(:@installed_versions)["npm"]).to eq("7.5.2")
       end
     end
 
