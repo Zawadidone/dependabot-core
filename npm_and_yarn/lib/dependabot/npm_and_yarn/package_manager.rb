@@ -284,11 +284,11 @@ module Dependabot
       # fall back to the version inferred from the dependency files.
       sig { params(name: T.nilable(String)).returns(String) }
       def installed_version(name)
-        # Return the memoized version if it has already been computed
-        return @installed_versions[name] if @installed_versions.key?(name)
-
         # Ensure the package manager is valid or fallback to default
         name = ensure_valid_package_manager(name)
+
+        # Return the memoized version if it has already been computed
+        return @installed_versions[name] if @installed_versions.key?(name)
 
         # Attempt to get the installed version
         installed_version = SharedHelpers.run_shell_command(
@@ -301,7 +301,8 @@ module Dependabot
           return @installed_versions[name]
         end
 
-        @installed_versions[name] = Helpers.public_send(:"#{name}_version_numeric", @lockfiles[name.to_sym]).to_s
+        @installed_versions[name] =
+          Helpers.public_send(:"#{name}_version_numeric", @lockfiles[name.to_sym]).to_s
         @installed_versions[name]
       end
 
