@@ -118,4 +118,56 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
       end
     end
   end
+
+  describe "#installed_version" do
+    before do
+      allow(Dependabot::NpmAndYarn::Helpers).to receive_messages(
+        npm_version_numeric: "7",
+        yarn_version_numeric: "1",
+        pnpm_version_numeric: "7"
+      )
+    end
+
+    context "when the installed version matches the expected format" do
+      before do
+        allow(Dependabot::SharedHelpers).to receive(:run_shell_command).with("npm --version",
+                                                                             fingerprint: "<name> --version").and_return("7.5.2")
+      end
+
+      it "returns the raw installed version and caches it" do
+        expect(helper.installed_version("npm")).to eq("7.5.2")
+        # Check that the version is memoized
+        expect(helper.instance_variable_get(:@installed_versions)["npm"]).to eq("7.5.2")
+      end
+    end
+
+    context "when the installed version does not match the expected format" do
+      before do
+        allow(Dependabot::SharedHelpers).to receive(:run_shell_command).with("yarn --version",
+                                                                             fingerprint: "<name> --version").and_return("invalid_version")
+        allow(Dependabot::NpmAndYarn::Helpers).to receive(:yarn_version_numeric).and_return("1")
+      end
+
+      it "falls back to the lockfile version" do
+        expect(helper.installed_version("yarn")).to eq("1")
+        # Check that the fallback version is memoized
+        expect(helper.instance_variable_get(:@installed_versions)["yarn"]).to eq("1")
+      end
+    end
+
+    context "when memoization is in effect" do
+      before do
+        allow(Dependabot::SharedHelpers).to receive(:run_shell_command).with("pnpm --version",
+                                                                             fingerprint: "<name> --version").and_return("7.1.0")
+        # Pre-cache the result
+        helper.installed_version("pnpm")
+      end
+
+      it "does not re-run the shell command and uses the cached version" do
+        expect(Dependabot::SharedHelpers).not_to receive(:run_shell_command).with("pnpm --version",
+                                                                                  fingerprint: "<name> --version")
+        expect(helper.installed_version("pnpm")).to eq("7.1.0")
+      end
+    end
+  end
 end

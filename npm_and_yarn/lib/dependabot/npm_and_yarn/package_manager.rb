@@ -278,6 +278,35 @@ module Dependabot
       # rubocop:enable Metrics/CyclomaticComplexity
       # rubocop:enable Metrics/PerceivedComplexity
 
+      # Retrieve the installed version of the package manager by executing
+      # the "<name> --version" command and using the output.
+      # If the output does not match the expected version format (PACKAGE_MANAGER_VERSION_REGEX),
+      # fall back to the version inferred from the dependency files.
+      sig { params(name: T.nilable(String)).returns(String) }
+      def installed_version(name)
+        # Return the memoized version if it has already been computed
+        return @installed_versions[name] if @installed_versions.key?(name)
+
+        # Ensure the package manager is valid or fallback to default
+        name = ensure_valid_package_manager(name)
+
+        # Attempt to get the installed version
+        installed_version = SharedHelpers.run_shell_command(
+          "#{name} --version",
+          fingerprint: "<name> --version"
+        ).strip
+
+        if installed_version.match?(PACKAGE_MANAGER_VERSION_REGEX)
+          @installed_versions[name] = installed_version
+          return @installed_versions[name]
+        end
+
+        @installed_versions[name] = Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym])
+
+        Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym]) if @installed_versions[name].nil?
+        @installed_versions[name]
+      end
+
       private
 
       sig { params(name: T.nilable(String)).returns(Ecosystem::VersionManager) }
@@ -308,35 +337,6 @@ module Dependabot
         )
 
         Dependabot.logger.info("Installed version of #{name}: #{installed_version(name)}")
-      end
-
-      # Retrieve the installed version of the package manager by executing
-      # the "<name> --version" command and using the output.
-      # If the output does not match the expected version format (PACKAGE_MANAGER_VERSION_REGEX),
-      # fall back to the version inferred from the dependency files.
-      sig { params(name: T.nilable(String)).returns(String) }
-      def installed_version(name)
-        # Return the memoized version if it has already been computed
-        return @installed_versions[name] if @installed_versions.key?(name)
-
-        # Ensure the package manager is valid or fallback to default
-        name = ensure_valid_package_manager(name)
-
-        # Attempt to get the installed version
-        installed_version = SharedHelpers.run_shell_command(
-          "#{name} --version",
-          fingerprint: "<name> --version"
-        ).strip
-
-        if installed_version.match?(PACKAGE_MANAGER_VERSION_REGEX)
-          @installed_versions[name] = installed_version
-          return @installed_versions[name]
-        end
-
-        @installed_versions[name] = Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym])
-
-        Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym]) if @installed_versions[name].nil?
-        @installed_versions[name]
       end
 
       sig { params(name: T.nilable(String)).returns(String) }
