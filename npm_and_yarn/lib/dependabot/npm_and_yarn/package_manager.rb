@@ -301,9 +301,7 @@ module Dependabot
           return @installed_versions[name]
         end
 
-        @installed_versions[name] = Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym])
-
-        Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym]) if @installed_versions[name].nil?
+        @installed_versions[name] = Helpers.send(:"#{name}_version_numeric", @lockfiles[name.to_sym]).to_s
         @installed_versions[name]
       end
 

@@ -69,7 +69,7 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
   describe "#package_manager" do
     context "when npm lockfile exists" do
       it "returns an NpmPackageManager instance" do
-        allow(Dependabot::NpmAndYarn::Helpers).to receive(:npm_version_numeric).and_return("7")
+        allow(Dependabot::NpmAndYarn::Helpers).to receive(:npm_version_numeric).and_return(7)
         expect(helper.package_manager).to be_a(Dependabot::NpmAndYarn::NpmPackageManager)
       end
     end
@@ -78,7 +78,7 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
       let(:lockfiles) { { yarn: yarn_lockfile } }
 
       it "returns a YarnPackageManager instance" do
-        allow(Dependabot::NpmAndYarn::Helpers).to receive(:yarn_version_numeric).and_return("1")
+        allow(Dependabot::NpmAndYarn::Helpers).to receive(:yarn_version_numeric).and_return(1)
         expect(helper.package_manager).to be_a(Dependabot::NpmAndYarn::YarnPackageManager)
       end
     end
@@ -87,7 +87,7 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
       let(:lockfiles) { { pnpm: pnpm_lockfile } }
 
       it "returns a PNPMPackageManager instance" do
-        allow(Dependabot::NpmAndYarn::Helpers).to receive(:pnpm_version_numeric).and_return("7")
+        allow(Dependabot::NpmAndYarn::Helpers).to receive(:pnpm_version_numeric).and_return(7)
         expect(helper.package_manager).to be_a(Dependabot::NpmAndYarn::PNPMPackageManager)
       end
     end
@@ -122,9 +122,9 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
   describe "#installed_version" do
     before do
       allow(Dependabot::NpmAndYarn::Helpers).to receive_messages(
-        npm_version_numeric: "7",
-        yarn_version_numeric: "1",
-        pnpm_version_numeric: "7"
+        npm_version_numeric: 7,
+        yarn_version_numeric: 1,
+        pnpm_version_numeric: 7
       )
     end
 
@@ -147,7 +147,7 @@ RSpec.describe Dependabot::NpmAndYarn::PackageManagerHelper do
           .with("yarn --version", fingerprint: "<name> --version")
           .and_return("invalid_version")
         allow(Dependabot::NpmAndYarn::Helpers).to receive(:yarn_version_numeric)
-          .and_return("1")
+          .and_return(1)
       end
 
       it "falls back to the lockfile version" do
