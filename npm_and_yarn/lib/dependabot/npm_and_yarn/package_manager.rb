@@ -215,6 +215,7 @@ module Dependabot
         @manifest_package_manager = package_json[MANIFEST_PACKAGE_MANAGER_KEY]
         @engines = package_json.fetch(MANIFEST_ENGINES_KEY, nil)
         @package_manager_detector = PackageManagerDetector.new(@lockfiles, @package_json)
+        @installed_versions = {}
       end
 
       sig { returns(Ecosystem::VersionManager) }
@@ -310,8 +311,6 @@ module Dependabot
 
         Dependabot.logger.info("Installed version of #{name}: #{installed_version(name)}")
       end
-
-      @installed_versions ||= {}
 
       sig { params(name: T.nilable(String)).returns(String) }
       def installed_version(name)
