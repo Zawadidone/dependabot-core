@@ -260,14 +260,14 @@ module Dependabot
         if version
           raise_if_unsupported!(name, version)
 
-          install(name, version)
+          Helpers.install(name, version.to_s)
         else
           version = guessed_version(name)
 
           if version
             raise_if_unsupported!(name, version.to_s)
 
-            install(name, version) if name == PNPMPackageManager::NAME
+            Helpers.install(name, version.to_s) if name == PNPMPackageManager::NAME
           end
         end
 
@@ -296,15 +296,6 @@ module Dependabot
         return unless Version.new(version) < Version.new("7")
 
         raise ToolVersionNotSupported.new(PNPMPackageManager::NAME.upcase, version, "7.*, 8.*")
-      end
-
-      def install(name, version)
-        Dependabot.logger.info("Installing \"#{name}@#{version}\"")
-
-        SharedHelpers.run_shell_command(
-          "corepack install #{name}@#{version} --global --cache-only",
-          fingerprint: "corepack install <name>@<version> --global --cache-only"
-        )
       end
 
       def requested_version(name)
